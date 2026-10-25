@@ -1,0 +1,35 @@
+# Compose para o Easypanel (serviço "Compose" com fonte GitHub).
+# - Gera a imagem a partir deste fork, assim as mudanças locais (pt-BR, Infistar) entram.
+# - Sem "ports" nem "container_name": o Easypanel expõe o serviço pela aba Domains.
+# - MPT_HOME=/data guarda config.toml, storage/ e resource/ num volume persistente
+#   compartilhado entre WebUI e API; o config.toml é criado na primeira execução.
+x-mpt-build: &mpt-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    DOCKER_BUILD_MIRROR: default
+    PIP_USE_OFFICIAL: "1"
+
+x-mpt-common: &mpt-common
+  image: moneyprinterturbo-fork:latest
+  environment:
+    MPT_HOME: /data
+  volumes:
+    - mpt-data:/data
+  restart: unless-stopped
+
+services:
+  webui:
+    <<: *mpt-common
+    build: *mpt-build
+    command: [ "streamlit", "run", "./webui/Main.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=False", "--client.toolbarMode=minimal", "--logger.hideWelcomeMessage=True", "--server.showEmailPrompt=False" ]
+
+  api:
+    <<: *mpt-common
+    build: *mpt-build
+    command: [ "python3", "main.py" ]
+    depends_on:
+      - webui
+
+volumes:
+  mpt-data:
