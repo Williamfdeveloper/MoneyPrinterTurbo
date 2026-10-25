@@ -13,7 +13,9 @@ WEBUI_MAIN = ROOT_DIR / "webui" / "Main.py"
 I18N_DIR = ROOT_DIR / "webui" / "i18n"
 LLM_PROVIDER_TIPS_PREFIX = "llm_provider_tips."
 TTS_PROVIDER_TIPS_PREFIX = "tts_provider_tips."
-SECONDARY_LOCALES = ("az", "ca", "de", "es", "fr", "id", "it", "ko", "pt", "ru", "tr", "vi")
+SECONDARY_LOCALES = ("az", "ca", "de", "es", "fr", "id", "it", "ko", "ru", "tr", "vi")
+# 完整翻译的 locale：与英文保持全部 key 一致，包括 Provider 长说明和 ENGLISH_FALLBACK_KEYS。
+FULL_LOCALES = ("pt",)
 PROVIDER_TIPS_PREFIXES = (
     LLM_PROVIDER_TIPS_PREFIX,
     TTS_PROVIDER_TIPS_PREFIX,
@@ -388,6 +390,31 @@ class TestWebuiI18n(unittest.TestCase):
                     self.assertEqual(
                         _markdown_urls(locale_translations[key]),
                         _markdown_urls(en_translations[key]),
+                    )
+
+    def test_full_locales_cover_every_english_key(self):
+        en_keys = set(_load_translation("en"))
+
+        for locale in FULL_LOCALES:
+            with self.subTest(locale=locale):
+                locale_keys = set(_load_translation(locale))
+                self.assertEqual(sorted(en_keys - locale_keys), [])
+                self.assertEqual(sorted(locale_keys - en_keys), [])
+
+    def test_full_locales_preserve_placeholders_and_markdown_urls(self):
+        en_translations = _load_translation("en")
+
+        for locale in FULL_LOCALES:
+            locale_translations = _load_translation(locale)
+            for key, en_value in en_translations.items():
+                with self.subTest(locale=locale, key=key):
+                    self.assertEqual(
+                        _format_placeholders(locale_translations[key]),
+                        _format_placeholders(en_value),
+                    )
+                    self.assertEqual(
+                        _markdown_urls(locale_translations[key]),
+                        _markdown_urls(en_value),
                     )
 
     def test_script_language_options_include_russian_and_catalan(self):
