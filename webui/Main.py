@@ -74,7 +74,7 @@ from app.utils.logging_utils import (
 )
 from app.utils import utils
 from app.utils.request_logging import trace_http_call
-from webui import access_ui, channels_ui
+from webui import access_ui, channel_manager_ui, channels_ui
 
 st.set_page_config(
     page_title="MoneyPrinterTurbo",
@@ -1879,6 +1879,7 @@ support_locales = [
     "es-ES",
     "fr-FR",
     "it-IT",
+    "pt-BR",
     "ru-RU",
     "vi-VN",
     "th-TH",
@@ -8542,6 +8543,9 @@ def _render_application():
         _render_settings_dialog()
 
     channels_ui.render_publication_queue(tr)
+    channel_manager_ui.render_channel_manager(
+        tr, st.session_state.get(channels_ui.CURRENT_PARAMS_KEY)
+    )
 
     if _apply_pending_settings_preset():
         st.success(tr("Settings Preset Imported"))

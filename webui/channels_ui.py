@@ -21,25 +21,6 @@ QUEUE_OPEN_KEY = "publication_queue_open"
 # Fields the channel switch must never overwrite on the page.
 _CONTENT_KEYS = ("video_subject", "video_script", "video_terms")
 _PRESET_EXCLUDED = ("video_materials", "custom_audio_file", "bgm_file")
-COMMON_TIMEZONES = [
-    "America/Sao_Paulo",
-    "America/Manaus",
-    "America/Fortaleza",
-    "America/Recife",
-    "America/Belem",
-    "America/Cuiaba",
-    "America/Porto_Velho",
-    "America/Rio_Branco",
-    "America/Noronha",
-    "UTC",
-    "America/New_York",
-    "America/Los_Angeles",
-    "Europe/Lisbon",
-    "Europe/London",
-    "Europe/Madrid",
-    "Asia/Shanghai",
-    "Asia/Tokyo",
-]
 _STATUS_TABS = (
     queue.STATUS_PENDING_APPROVAL,
     queue.STATUS_SCHEDULED,
@@ -106,6 +87,15 @@ def render_top_bar_controls(tr) -> None:
             width=200,
             help=tr("channels.selector_help"),
         )
+    from webui import channel_manager_ui
+
+    st.button(
+        tr("channels.manager_button"),
+        key="channel_manager_button",
+        icon=":material/hub:",
+        width="content",
+        on_click=channel_manager_ui.open_manager,
+    )
     pending = queue.count_by_status().get(queue.STATUS_PENDING_APPROVAL, 0)
     label = tr("publication.queue_button")
     if pending:
@@ -373,128 +363,22 @@ def render_publication_queue(tr) -> None:
         _render_queue_body(tr)
 
 
-def _publish_mode_label(tr, mode: str) -> str:
-    return tr(f"channels.mode.{mode}")
+def _open_manager_from_settings():
+    from webui import channel_manager_ui
 
-
-def _render_channel_form(tr, channel: channel_service.Channel | None, current_params: dict) -> None:
-    is_new = channel is None
-    channel = channel or channel_service.Channel(
-        id="", name="", publish_mode="approval", timezone="America/Sao_Paulo",
-        posting_times=["09:00", "18:00"],
-    )
-    form_key = "channel_form_new" if is_new else f"channel_form_{channel.id}"
-    with st.form(form_key, border=not is_new):
-        id_col, name_col = st.columns(2)
-        channel_id = id_col.text_input(
-            tr("channels.id"), value=channel.id, max_chars=48,
-            help=tr("channels.id_help"), key=f"{form_key}_id",
-        )
-        name = name_col.text_input(
-            tr("channels.name"), value=channel.name, max_chars=100, key=f"{form_key}_name"
-        )
-        user_col, platform_col = st.columns(2)
-        username = user_col.text_input(
-            tr("channels.upload_post_username"), value=channel.upload_post_username,
-            help=tr("channels.upload_post_username_help"), key=f"{form_key}_user",
-        )
-        platforms = platform_col.multiselect(
-            tr("channels.platforms"), options=list(channel_service.SUPPORTED_PLATFORMS),
-            default=channel.platforms, key=f"{form_key}_platforms",
-        )
-        publish_mode = st.radio(
-            tr("channels.publish_mode"),
-            options=list(channel_service.PUBLISH_MODES),
-            index=list(channel_service.PUBLISH_MODES).index(channel.publish_mode),
-            format_func=lambda mode: _publish_mode_label(tr, mode),
-            horizontal=True,
-            key=f"{form_key}_mode",
-            help=tr("channels.publish_mode_help"),
-        )
-        times_col, tz_col = st.columns(2)
-        posting_times = times_col.text_input(
-            tr("channels.posting_times"), value=", ".join(channel.posting_times),
-            help=tr("channels.posting_times_help"), key=f"{form_key}_times",
-        )
-        timezones = list(COMMON_TIMEZONES)
-        if channel.timezone not in timezones:
-            timezones.insert(0, channel.timezone)
-        tz_name = tz_col.selectbox(
-            tr("channels.timezone"), options=timezones,
-            index=timezones.index(channel.timezone), key=f"{form_key}_tz",
-        )
-        yt_col, kids_col = st.columns(2)
-        privacy = yt_col.selectbox(
-            tr("channels.youtube_privacy"),
-            options=list(channel_service.YOUTUBE_PRIVACY_STATUSES),
-            index=list(channel_service.YOUTUBE_PRIVACY_STATUSES).index(channel.youtube_privacy_status),
-            key=f"{form_key}_privacy",
-        )
-        made_for_kids = kids_col.checkbox(
-            tr("channels.made_for_kids"), value=channel.youtube_made_for_kids,
-            key=f"{form_key}_kids",
-        )
-        if channel.params:
-            st.caption(tr("channels.params_saved").format(count=len(channel.params)))
-        use_current = st.checkbox(
-            tr("channels.use_current_settings"),
-            value=is_new,
-            help=tr("channels.use_current_settings_help"),
-            key=f"{form_key}_use_current",
-        )
-        submitted = st.form_submit_button(
-            tr("channels.create") if is_new else tr("channels.save"),
-            type="primary",
-        )
-    if submitted:
-        params = dict(channel.params)
-        if use_current:
-            params = {
-                key: value
-                for key, value in (current_params or {}).items()
-                if key in VideoParams.model_fields
-                and key not in channel_service.EXCLUDED_PARAM_KEYS
-            }
-        try:
-            saved = channel_service.save_channel(
-                channel_service.Channel(
-                    id=channel_id,
-                    name=name,
-                    upload_post_username=username,
-                    platforms=platforms,
-                    publish_mode=publish_mode,
-                    posting_times=[part.strip() for part in posting_times.replace(";", ",").split(",")],
-                    timezone=tz_name,
-                    youtube_privacy_status=privacy,
-                    youtube_made_for_kids=made_for_kids,
-                    params=params,
-                ),
-                previous_id=None if is_new else channel.id,
-            )
-        except channel_service.ChannelError as exc:
-            st.error(tr("channels.save_failed").format(error=exc))
-            return
-        st.success(tr("channels.saved").format(name=saved.name))
-    if not is_new:
-        if st.button(
-            tr("channels.delete"), key=f"{form_key}_delete", icon=":material/delete:",
-            help=tr("channels.delete_help"),
-        ):
-            channel_service.delete_channel(channel.id)
-            if st.session_state.get(SELECTOR_KEY) == channel.id:
-                st.session_state[SELECTOR_KEY] = ""
-            st.success(tr("channels.deleted").format(name=channel.name))
+    channel_manager_ui.open_manager()
+    st.session_state["settings_dialog_open"] = False
 
 
 def render_channel_settings(tr) -> None:
-    """Settings tab: create and edit channel profiles."""
+    """Settings tab: short intro and a shortcut to the channel manager screen."""
     st.write(tr("channels.settings_intro"))
-    st.info(tr("channels.settings_upload_post_hint"))
-    current_params = st.session_state.get(CURRENT_PARAMS_KEY) or {}
     channels = channel_service.load_channels()
-    for channel in channels.values():
-        with st.expander(f"{channel.name} · {_publish_mode_label(tr, channel.publish_mode)}"):
-            _render_channel_form(tr, channel, current_params)
-    with st.expander(tr("channels.new"), expanded=not channels):
-        _render_channel_form(tr, None, current_params)
-    st.caption(tr("channels.file_hint").format(path=channel_service.channels_file()))
+    st.caption(tr("channels.settings_count").format(count=len(channels)))
+    st.button(
+        tr("channels.open_manager"),
+        key="settings_open_channel_manager",
+        type="primary",
+        icon=":material/hub:",
+        on_click=_open_manager_from_settings,
+    )
