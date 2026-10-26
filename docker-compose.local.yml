@@ -1,0 +1,46 @@
+# Compose para rodar este fork localmente no Docker Desktop.
+#   docker compose -f docker-compose.local.yml up -d --build
+# WebUI: http://127.0.0.1:8501   API: http://127.0.0.1:8080/docs
+# - Gera a imagem a partir deste repositório, com espelhos oficiais (fora da China).
+# - MPT_HOME=/data guarda config.toml, storage/ e resource/ no volume "mpt-data",
+#   compartilhado entre WebUI e API; o config.toml é criado na primeira execução.
+# - Portas presas a 127.0.0.1: só este computador acessa.
+name: moneyprinterturbo-local
+
+x-mpt-build: &mpt-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    DOCKER_BUILD_MIRROR: default
+    PIP_USE_OFFICIAL: "1"
+
+x-mpt-common: &mpt-common
+  image: moneyprinterturbo-fork:latest
+  environment:
+    MPT_HOME: /data
+    # Login na WebUI (docs/channels.md). Também dá para definir em Configurações > Acesso.
+    MPT_WEBUI_PASSWORD: ${MPT_WEBUI_PASSWORD:-}
+    MPT_WEBUI_USERNAME: ${MPT_WEBUI_USERNAME:-admin}
+  volumes:
+    - mpt-data:/data
+  restart: unless-stopped
+
+services:
+  webui:
+    <<: *mpt-common
+    build: *mpt-build
+    ports:
+      - "127.0.0.1:8501:8501"
+    command: [ "streamlit", "run", "./webui/Main.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.serverAddress=127.0.0.1", "--browser.gatherUsageStats=False", "--client.toolbarMode=minimal", "--logger.hideWelcomeMessage=True", "--server.showEmailPrompt=False" ]
+
+  api:
+    <<: *mpt-common
+    build: *mpt-build
+    ports:
+      - "127.0.0.1:8080:8080"
+    command: [ "python3", "main.py" ]
+    depends_on:
+      - webui
+
+volumes:
+  mpt-data:

@@ -1,5 +1,7 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim-bullseye
+# Debian 11 bullseye 的 LTS 已于 2026-08 结束，安全源从 deb.debian.org 下线后
+# apt 会返回 404，因此改用仍受支持的 Debian 12 bookworm。
+FROM python:3.11-slim-bookworm
 
 # Set the working directory in the container
 WORKDIR /MoneyPrinterTurbo
@@ -23,8 +25,10 @@ RUN set -u; \
     write_debian_sources() { \
         main_url="$1"; \
         security_url="$2"; \
-        printf 'deb %s bullseye main\ndeb %s bullseye-updates main\ndeb %s bullseye-security main\n' \
+        printf 'deb %s bookworm main\ndeb %s bookworm-updates main\ndeb %s bookworm-security main\n' \
             "$main_url" "$main_url" "$security_url" > /etc/apt/sources.list; \
+        # bookworm 镜像默认使用 deb822 格式的 debian.sources，删除后只保留上面写入的源。
+        rm -f /etc/apt/sources.list.d/debian.sources; \
         rm -rf /var/lib/apt/lists/*; \
     }; \
     install_system_dependencies() { \
