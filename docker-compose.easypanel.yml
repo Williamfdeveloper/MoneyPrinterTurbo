@@ -14,6 +14,9 @@ x-mpt-common: &mpt-common
   image: moneyprinterturbo-fork:latest
   environment:
     MPT_HOME: /data
+    # Defina MPT_WEBUI_PASSWORD no painel para exigir login na WebUI exposta.
+    MPT_WEBUI_PASSWORD: ${MPT_WEBUI_PASSWORD:-}
+    MPT_WEBUI_USERNAME: ${MPT_WEBUI_USERNAME:-admin}
   volumes:
     - mpt-data:/data
   restart: unless-stopped

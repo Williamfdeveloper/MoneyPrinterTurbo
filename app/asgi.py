@@ -44,6 +44,12 @@ async def application_lifespan(_: FastAPI):
 
     task_service.recover_interrupted_cross_posts()
 
+    # Scheduled channel posts live on disk; publish them from this process
+    # too, so they keep flowing when the WebUI is not running.
+    from app.services import publication_scheduler
+
+    publication_scheduler.ensure_started()
+
     # Redis queue entries persist across API restarts. No task_done callback
     # exists in the new process to dispatch them, so fill its worker slots now.
     from app.controllers.manager.redis_manager import RedisTaskManager

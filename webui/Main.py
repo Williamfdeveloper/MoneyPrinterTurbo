@@ -74,6 +74,7 @@ from app.utils.logging_utils import (
 )
 from app.utils import utils
 from app.utils.request_logging import trace_http_call
+from webui import access_ui, channels_ui
 
 st.set_page_config(
     page_title="MoneyPrinterTurbo",
@@ -1817,6 +1818,8 @@ def _render_top_bar():
         ):
             _render_task_manager_entry()
 
+            channels_ui.render_top_bar_controls(tr)
+
             st.button(
                 tr("Settings"),
                 key="open_settings_dialog_button",
@@ -1862,6 +1865,8 @@ def _render_top_bar():
                             st.session_state[content_key] = st.session_state[content_key]
                     # 切换语言后强制刷新，避免 selectbox 继续展示旧语言文案。
                     st.rerun()
+
+            access_ui.render_logout_button(tr)
 
 
 support_locales = [
@@ -2189,6 +2194,8 @@ def _render_current_generation_task():
     state = _normalize_task_state((task or {}).get("state"))
     if state in {const.TASK_STATE_COMPLETE, const.TASK_STATE_FAILED}:
         _remove_active_generation_task(task_id)
+        if state == const.TASK_STATE_COMPLETE:
+            channels_ui.render_task_publication_note(tr, task)
         _render_generation_task_snapshot(task_id, task)
         return
 
@@ -3246,10 +3253,13 @@ def _render_settings_dialog():
             tr("Interface Settings Tab"),
             tr("Key Backup Tab"),
             tr("Cache Management Tab"),
+            tr("channels.tab"),
+            tr("access.tab"),
         ]
         settings_tab_targets = {
             "llm": tr("LLM Settings Tab"),
             "material": tr("Material API Tab"),
+            "channels": tr("channels.tab"),
         }
         settings_tabs_key = localized_widget_key("settings_dialog_tabs")
         target_tab = st.session_state.pop("settings_dialog_target_tab", None)
@@ -3265,11 +3275,24 @@ def _render_settings_dialog():
             left_config_panel,
             key_backup_panel,
             cache_config_panel,
+            channels_config_panel,
+            access_config_panel,
         ) = st.tabs(
             settings_tab_labels,
             key=settings_tabs_key,
             on_change="rerun",
         )
+
+        # Fork tabs render lazily, so their forms only exist while they are open.
+        if channels_config_panel.open:
+            with channels_config_panel:
+                channels_ui.render_channel_settings(tr)
+
+        if access_config_panel.open:
+            with access_config_panel:
+                access_ui.render_access_settings(
+                    tr, _set_runtime_config, _delete_runtime_config, _save_runtime_config
+                )
 
         with publish_config_panel:
             st.write(tr("Automatically publish generated videos to social media using upload-post.com"))
@@ -8510,10 +8533,15 @@ def _render_generation_controls(
 
 def _render_application():
     """按固定顺序渲染顶部栏、弹窗、生成表单和任务结果。"""
+    if not access_ui.require_login(tr):
+        return
+
     _render_top_bar()
 
     if st.session_state.get("settings_dialog_open", False):
         _render_settings_dialog()
+
+    channels_ui.render_publication_queue(tr)
 
     if _apply_pending_settings_preset():
         st.success(tr("Settings Preset Imported"))
@@ -8545,6 +8573,11 @@ def _render_application():
     )
 
     _render_subtitle_settings(right_panel, params)
+
+    # The selected channel decides how the finished video is published; the
+    # snapshot lets a channel switch keep the content typed on the page.
+    params.channel_id = channels_ui.selected_channel_id()
+    channels_ui.remember_current_params(params)
 
     generation_submitted = _render_generation_controls(
         params,

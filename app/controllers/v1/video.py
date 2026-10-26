@@ -33,6 +33,7 @@ from app.models.schema import (
     VideoMaterialRetrieveResponse
 )
 from app.services import bgm as bgm_service
+from app.services import channels as channel_service
 from app.services import material_upload as material_upload_service
 from app.services import state as sm
 from app.services import task as tm
@@ -240,6 +241,13 @@ def create_task(
     task_id = utils.get_uuid()
     request_id = base.get_task_id(request)
     try:
+        channel_id = getattr(body, "channel_id", "")
+        if isinstance(channel_id, str) and channel_id:
+            # Channel presets fill only the fields the client did not send.
+            # ChannelError is a ValueError, so an unknown channel returns 400.
+            body = channel_service.apply_channel_defaults(
+                body, channel_service.require_channel(channel_id)
+            )
         if (
             stop_at == "video"
             and isinstance(body, TaskVideoRequest)

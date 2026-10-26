@@ -102,6 +102,11 @@ pixabay_api_keys = []
 # Register at https://coverr.co/developers?ctx=header_navigation
 coverr_api_keys = []
 
+# When the chosen stock source (pexels, pixabay or coverr) fails or finds no
+# footage, try these sources in order. Only sources with an API key are used,
+# and paid AI video sources never fall back. Use [] to disable.
+video_source_fallbacks = ["pexels", "pixabay", "coverr"]
+
 # WaveSpeed AI generates clips from your script keywords with text-to-video
 # models. Create an API key at https://wavespeed.ai
 wavespeed_api_keys = []
@@ -620,6 +625,14 @@ upload_post_youtube_made_for_kids = false
 # Cross-post jobs run in the current process and are not resumed after restart.
 upload_post_max_pending_tasks = 10
 
+# Channels (channels.toml next to this file) queue their videos for approval
+# and scheduled posting instead of the single-account auto-publish above. They
+# share upload_post_api_key and use their own Upload-Post profile. See
+# docs/channels.md. The scheduler runs in the WebUI and API processes and
+# checks the queue every publication_poll_seconds.
+publication_scheduler_enabled = true
+publication_poll_seconds = 30
+
 # =============================================================================
 # Whisper Subtitles / Whisper 字幕
 # =============================================================================
@@ -754,6 +767,12 @@ voice_id = "default"
 [ui]
 # Hide generation logs in the WebUI.
 hide_log = false
+
+# WebUI login. Set the password in Settings > Access (only a salted hash is
+# stored here) or with the MPT_WEBUI_PASSWORD / MPT_WEBUI_USERNAME environment
+# variables, which take precedence. Leave empty to keep the WebUI open.
+# webui_username = "admin"
+# webui_password_hash = ""
 
 # Open the task folder automatically after video generation completes.
 # 视频生成完成后是否自动打开任务目录；关闭后仍可在任务管理中手动打开。

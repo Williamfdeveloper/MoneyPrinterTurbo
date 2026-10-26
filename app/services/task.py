@@ -35,6 +35,8 @@ from app.services import (
     voice,
 )
 from app.services import upload_post
+from app.services import channels as channel_service
+from app.services import material_fallback, publication_queue
 from app.services import state as sm
 from app.utils import file_security, utils
 from app.utils.subtitle_writer import staged_subtitle_file
@@ -808,11 +810,11 @@ def get_video_materials(
         logger.info(f"\n\n## downloading videos from {params.video_source}")
         # 顺序匹配模式只在用户显式开启时生效。这里强制素材下载按关键词顺序
         # 轮询，避免某个早期关键词下载太多素材，把后续脚本主题挤出最终时间线。
-        try:
-            downloaded_videos = material.download_videos(
+        def download_from(source):
+            return material.download_videos(
                 task_id=task_id,
                 search_terms=video_terms,
-                source=params.video_source,
+                source=source,
                 video_aspect=params.video_aspect,
                 video_concat_mode=(
                     VideoConcatMode.sequential
@@ -826,6 +828,13 @@ def get_video_materials(
                 # 素材阶段占用 40%~50%：每下完一个文件推进一次，慢速网络下
                 # 进度条不再长时间停在 40%。
                 progress_callback=_stage_progress_reporter(task_id, 40, 50),
+            )
+
+        try:
+            # Stock sources fall back to the next one with an API key when
+            # they fail or find nothing; other sources run exactly once.
+            downloaded_videos, _ = material_fallback.download_with_fallback(
+                params.video_source, download_from
             )
         except volcengine_seedance.VolcEngineSeedanceError as exc:
             # 未确认状态和已生成但下载失败都对应一个可在方舟控制台恢复的远端
@@ -1553,6 +1562,16 @@ def _run_pipeline(
             task_id, "preflight", f"unsupported video source: {params.video_source!r}"
         )
 
+    # Audio and subtitle requests have no channel; only full videos publish.
+    channel = None
+    channel_id = getattr(params, "channel_id", "")
+    if isinstance(channel_id, str) and channel_id:
+        channel = channel_service.get_channel(channel_id)
+        if channel is None:
+            return _mark_task_failed(
+                task_id, "preflight", f"unknown channel: {channel_id!r}"
+            )
+
     if (
         stop_at in {"materials", "video"}
         and params.video_source == "volcengine_seedance"
@@ -1864,8 +1883,11 @@ def _run_pipeline(
 
     # 7. 先完成视频生成任务，再按需提交跨平台发布。第三方上传可能耗时
     # 数分钟，不应阻塞视频结果返回，也不能反向影响已经生成的成片。
+    # Channel videos go through the publication queue (approval/schedule)
+    # instead of the legacy single-account auto-publish.
     cross_post_enabled = (
-        upload_post.upload_post_service.is_configured()
+        channel is None
+        and upload_post.upload_post_service.is_configured()
         and upload_post.upload_post_service.auto_upload
     )
     platforms = (
@@ -1918,6 +1940,30 @@ def _run_pipeline(
             kwargs["cross_post_state"] = const.CROSS_POST_STATE_FAILED
             kwargs["cross_post_error"] = scheduling_error
             kwargs["cross_post_owner"] = None
+
+    if channel is not None:
+        try:
+            publication_ids = publication_queue.enqueue_task_videos(
+                task_id=task_id,
+                video_paths=final_video_paths,
+                channel=channel,
+                video_subject=params.video_subject or "",
+                video_script=video_script,
+                video_language=params.video_language or "",
+            )
+        except Exception as exc:
+            # The video is done; a queue problem only affects publishing.
+            logger.exception(f"failed to queue publication, task_id: {task_id}: {exc}")
+            publication_ids = []
+            kwargs["publication_error"] = str(exc)
+        kwargs["channel_id"] = channel.id
+        kwargs["publication_ids"] = publication_ids
+        sm.state.patch_task(
+            task_id,
+            channel_id=channel.id,
+            publication_ids=publication_ids,
+            publication_error=kwargs.get("publication_error"),
+        )
 
     return kwargs
 

@@ -20,6 +20,9 @@ PROVIDER_TIPS_PREFIXES = (
     LLM_PROVIDER_TIPS_PREFIX,
     TTS_PROVIDER_TIPS_PREFIX,
 )
+# Fork features (channels, publication queue, WebUI login) are maintained in
+# en, zh and the full locales; secondary locales fall back to English.
+FORK_FEATURE_PREFIXES = ("channels.", "publication.", "access.")
 # 合作 Provider 的品牌名和长说明只维护中英文。次要 locale 统一回退英文，
 # 避免把完全相同的品牌名复制十份，也避免长说明后续只更新部分语言。
 ENGLISH_FALLBACK_KEYS = frozenset(
@@ -229,6 +232,7 @@ def _required_translation_keys(translations):
         for key in translations
         if key not in ENGLISH_FALLBACK_KEYS
         and not key.startswith(PROVIDER_TIPS_PREFIXES)
+        and not key.startswith(FORK_FEATURE_PREFIXES)
     }
 
 
@@ -364,7 +368,11 @@ class TestWebuiI18n(unittest.TestCase):
             with self.subTest(locale=locale):
                 locale_keys = set(_load_translation(locale))
                 self.assertEqual(
-                    sorted(visitor.keys - locale_keys - ENGLISH_FALLBACK_KEYS),
+                    sorted(
+                        key
+                        for key in visitor.keys - locale_keys - ENGLISH_FALLBACK_KEYS
+                        if not key.startswith(FORK_FEATURE_PREFIXES)
+                    ),
                     [],
                 )
 

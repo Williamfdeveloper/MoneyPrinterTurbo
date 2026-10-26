@@ -703,6 +703,15 @@ Batch manifests:
     )
 
     execution_group = parser.add_argument_group("execution")
+    execution_group.add_argument(
+        "--channel",
+        default=None,
+        metavar="ID",
+        help=(
+            "channel profile from channels.toml: fills settings you did not pass "
+            "explicitly and queues the finished video for that channel"
+        ),
+    )
     execution_mode = execution_group.add_mutually_exclusive_group()
     execution_mode.add_argument(
         "--task-id",
@@ -720,6 +729,8 @@ Batch manifests:
         ),
     )
     args = parser.parse_args(argv)
+    # Remember the defaults so a --channel preset only fills unset options.
+    args._parser_defaults = {action.dest: action.default for action in parser._actions}
 
     if (
         not args.batch_file
@@ -1070,7 +1081,34 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         elif ui_enabled is True:
             params_kwargs["text_background_color"] = True
 
-    return VideoParams(**params_kwargs)
+    params = VideoParams(**params_kwargs)
+    channel_id = getattr(args, "channel", None)
+    if channel_id:
+        params = _apply_cli_channel(params, channel_id, _explicit_cli_fields(args))
+    return params
+
+
+_CLI_CONTENT_FIELDS = frozenset({"video_subject", "video_script", "video_terms"})
+
+
+def _explicit_cli_fields(args: argparse.Namespace) -> set[str]:
+    """VideoParams fields whose CLI option differs from its parser default."""
+    defaults = getattr(args, "_parser_defaults", {})
+    explicit = set(_CLI_CONTENT_FIELDS)
+    for dest, default in defaults.items():
+        if dest in vars(args) and getattr(args, dest) != default:
+            explicit.add(dest)
+    return explicit
+
+
+def _apply_cli_channel(params: VideoParams, channel_id: str, explicit_fields) -> VideoParams:
+    # ChannelError is a ValueError, which the CLI reports as invalid input.
+    from app.services import channels as channel_service
+
+    channel = channel_service.require_channel(channel_id)
+    return channel_service.apply_channel_defaults(
+        params, channel, explicit_fields=explicit_fields
+    )
 
 
 def _load_batch_manifest(raw_path: str) -> tuple[str, list[dict[str, Any]]]:
@@ -1372,6 +1410,12 @@ def _build_batch_tasks(args: argparse.Namespace) -> list[VideoParams]:
                 {**copy.deepcopy(base_values), **entry}
             )
             override_fields = set(entry)
+            entry_channel = entry.get("channel_id")
+            if entry_channel and entry_channel != base_params.channel_id:
+                # A manifest can mix channels; each entry gets its own preset.
+                params = _apply_cli_channel(
+                    params, entry_channel, override_fields | _explicit_cli_fields(args)
+                )
             _resolve_batch_entry_paths(
                 params,
                 override_fields=override_fields,

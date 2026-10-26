@@ -206,6 +206,7 @@ Obrigado ao [Kimi](https://platform.kimi.ai?track_id=track-9e3b711aa2594e378f6fe
 
 - [x] Exporte vídeos na vertical `9:16 (1080×1920)`, na horizontal `16:9 (1920×1080)` ou quadrados `1:1 (1080×1080)`
 - [x] Publique os vídeos prontos direto no **TikTok, Instagram e YouTube Shorts**
+- [x] **Vários canais** com uma só IA: perfil do Upload-Post, horários e estilo por canal, **fila de aprovação**, **agendamento**, fontes de vídeo em cascata e **login na WebUI** ([guia](docs/channels.md))
 
 ## Galeria 🎬
 
