@@ -1,6 +1,8 @@
 # Compose para o Easypanel (serviço "Compose" com fonte GitHub).
 # - Gera a imagem a partir deste fork, assim as mudanças locais (pt-BR, Infistar) entram.
-# - Sem "ports" nem "container_name": o Easypanel expõe o serviço pela aba Domains.
+# - Sem "container_name": o Easypanel expõe o serviço pela aba Domains.
+# - A WebUI também fica em 127.0.0.1:8501 do servidor, para um Cloudflare Tunnel
+#   rodando no host apontar para http://localhost:8501. Não abre porta para a internet.
 # - MPT_HOME=/data guarda config.toml, storage/ e resource/ num volume persistente
 #   compartilhado entre WebUI e API; o config.toml é criado na primeira execução.
 x-mpt-build: &mpt-build
@@ -25,6 +27,8 @@ services:
   webui:
     <<: *mpt-common
     build: *mpt-build
+    ports:
+      - "127.0.0.1:8501:8501"
     command: [ "streamlit", "run", "./webui/Main.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=False", "--client.toolbarMode=minimal", "--logger.hideWelcomeMessage=True", "--server.showEmailPrompt=False" ]
 
   api:
